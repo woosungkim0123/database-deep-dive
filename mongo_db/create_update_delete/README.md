@@ -707,6 +707,129 @@ db.users.updateOne({}, {"$setOnInsert" : { "createdAt" : new Date() }}, { "upser
 }
 ```
 
+### updateMany()
 
+조건에 맞는 도큐먼트를 모두 수정합니다.
 
+스키마를 변경한다거나 특정 사용자에게 새로운 정볼르 추가할 때 사용하기 좋습니다.
 
+e.g. 생일인 사용자에게 쿠폰 추가
+
+```shell
+db.users.find()
+[
+  { _id: ObjectId('65e266654842563d1a223a85'), name: 'John', age: 20 },
+  { _id: ObjectId('65e266654842563d1a223a86'), name: 'Ann', age: 21 },
+  { _id: ObjectId('65e266654842563d1a223a87'), name: 'David', age: 22 }
+]
+
+db.users.updateMany({ "age" : { "$gt" : 20 } }, { "$set" : { "coupon" : "20% off" } })
+# 결과
+[
+  { _id: ObjectId('65e266654842563d1a223a85'), name: 'John', age: 20 },
+  {
+    _id: ObjectId('65e266654842563d1a223a86'),
+    name: 'Ann',
+    age: 21,
+    coupon: '20% off'
+  },
+  {
+    _id: ObjectId('65e266654842563d1a223a87'),
+    name: 'David',
+    age: 22,
+    coupon: '20% off'
+  }
+]
+```
+
+### 갱신한 도큐먼트 반환
+
+`findOneAndUpdate`, `findOneAndReplace`, `findOneAndDelete`를 사용하면 갱신한 도큐먼트를 반환할 수 있습니다.
+
+`updateOne`과 주요 차이점은 해당 연산들은 트랜잭션의 원자성(Atomicity) 원칙을 따르며, 시작부터 끝까지 (즉, 찾고 업데이트하는 과정 전체를 포함하여) '분할 불가능한' 하나의 단위로 처리됩니다. 
+
+몽고DB 4.2부터는 갱신을 위한 집계 파이프라인을 수용하도록 확장하여 `addFields($set)`, `project($unset)`, `replaceRoot($replaceWith)`로 구성될 수 있습니다.
+
+**경쟁 상태 문제 예시**
+
+`준비 상태`인 프로세스 중 우선순위가 가장 높은 프로세스 하나를 찾아서 `동작중`인 상태로 변경하고 특정 작업을 수행 후 `완료` 상태로 변경하는 알고리즘을 짠다고 가정하겠습니다.
+
+```shell
+var cursor = db.process.find({ "status" : "READY" }).sort({ "priority" : -1 }).limit(1)
+
+while ((ps = cursor.next()) != null) {
+    var result = db.process.updateOne({ "_id" : ps._id, "status" : "READY" }, { "$set" : { "status" : "RUNNING" } })
+    
+    if (result.modifiedCount > 0) {
+        # 특정 작업 수행
+        db.process.updateOne({ "_id" : ps._id, "status" : "RUNNING" }, { "$set" : { "status" : "COMPLETE" } })
+        break;
+    }
+    cursor = db.process.find({ "status" : "READY" }).sort({ "priority" : -1 }).limit(1)
+}
+```
+
+위 처럼 알고리즘을 짜게되면 여러 스레드가 동시에 접속했을 때 경쟁 상태가 발생할 수 있습니다.
+
+두개 스레드가 동일한 가장 우선순위가 높은 프로세스를 찾아서 변경하려고 하면 하나는 성공하고 다른 하나는 실패하게 됩니다. 이러다보면 하나의 스레드만 계속 동작할 가능성이 발생합니다. 
+
+이런 상황에 `findOneAndUpdate`를 사용하면 경쟁 상태 문제를 해결할 수 있습니다.
+
+```shell
+db.process.insertMany([
+{ "name": "ProcessA", "priority": 20, status: "READY" },
+{ "name": "ProcessB", "priority": 5, status: "READY" },
+{ "name": "ProcessC", "priority": 3, status: "READY" }
+])
+[
+  {
+    _id: ObjectId('65e272f04842563d1a223a88'),
+    name: 'ProcessA',
+    priority: 20,
+    status: 'READY'
+  },
+  {
+    _id: ObjectId('65e272f04842563d1a223a89'),
+    name: 'ProcessB',
+    priority: 5,
+    status: 'READY'
+  },
+  {
+    _id: ObjectId('65e272f04842563d1a223a8a'),
+    name: 'ProcessC',
+    priority: 3,
+    status: 'READY'
+  }
+]
+# returnNewDocument를 사용하면 갱신된 도큐먼트를 반환합니다. (false면 갱신 전 도큐먼트 반환)
+var ps = db.process.findOneAndUpdate({ "status" : "READY" }, 
+  { "$set" : { "status" : "RUNNING" } }, 
+  { "sort" : { "priority" : -1 }, 
+  "returnNewDocument" : true })
+
+# 로직 작업처리~
+
+db.process.updateOne({ "_id" : ps._id}, { "$set" : { "status" : "DONE" } })
+
+# 결과
+[
+  {
+    _id: ObjectId('65e272f04842563d1a223a88'),
+    name: 'ProcessA',
+    priority: 20,
+    status: 'DONE'
+  },
+  {
+    _id: ObjectId('65e272f04842563d1a223a89'),
+    name: 'ProcessB',
+    priority: 5,
+    status: 'READY'
+  },
+  {
+    _id: ObjectId('65e272f04842563d1a223a8a'),
+    name: 'ProcessC',
+    priority: 3,
+    status: 'READY'
+  }
+]
+```
