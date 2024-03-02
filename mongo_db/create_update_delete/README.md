@@ -1,6 +1,6 @@
 # CUD (Create, Update, Delete)
 
-## 도큐먼트 삽입
+## 문서(Document) 삽입
 
 ### InsertOne
 
@@ -8,7 +8,11 @@
 
 ```shell
 db.users.insertOne({ "name": "John", "age": 20 });
-# 결과
+```
+
+**결과**
+
+```shell
 {
   acknowledged: true, # 성공적으로 수행되었음을 나타내는 표시
   insertedId: ObjectId('65e1aa28e155ec69a55dc759')
@@ -19,57 +23,48 @@ db.users.insertOne({ "name": "John", "age": 20 });
 
 여러 도큐먼트를 컬렉션에 삽입할 수 있습니다. 
 
-대량 삽입(batch insert)을 하므로 훨씬 효율적 입니다.
+대량 삽입(batch insert)을 하므로 효율적 입니다.
 
 ```shell
-db.users.drop() # user 컬렉션 삭제
-
 db.users.insertMany([
   { "name": "John", "age": 20 },
   { "name": "Ann", "age": 21 },
   { "name": "David", "age": 22 }
 ])
-# 결과
-{
-  acknowledged: true,
-  insertedIds: {
-    '0': ObjectId('65e1aa75e155ec69a55dc75a'),
-    '1': ObjectId('65e1aa75e155ec69a55dc75b'),
-    '2': ObjectId('65e1aa75e155ec69a55dc75c')
-  }
-}
 ```
 
-한 문서가 가질 수 있는 최대 데이터 양은 16MB입니다.
+한 문서의 최대 데이터 양은 16MB 이고, 한번에 처리할 수 있는 최대 데이터 양은 100,000개 입니다. (`maxWriteBatchSize`의 기본값이 100,000개)
 
-`maxWriteBatchSize`의 기본값은 100,000개이며 한번에 최대 10만개의 문서를 처리할 수 있다는 것을 의미합니다.
+만약 20만개의 문서를 요청하면 여러 배치로 나누어 처리하게 됩니다.
 
-만약 20만개의 문서를 삽입하려고하면 자동으로 여러 배치로 나누어 처리하게 됩니다.
+**대량 삽입 중 오류 발생하는 경우** 정렬 연산을 선택했는지 안했는지에 따라 발생하는 상황이 달라집니다.
 
-**대량 삽입 중 오류 발생시**
+insertMany의 두번째 매개변수인 옵션 도큐먼트에 `ordered` 키에 true(기본값)를 지정하면 제공된 순서대로 삽입되고 false면 성능 개선을 위해 삽입을 재배열 할 수도 있습니다.
 
-정렬 연산을 선택했는지 안했는지에 따라 발생하는 상황이 달라집니다.
+**정렬이 된 경우** 오류가 발생하면 그 시점에서 삽입을 중단하고 오류를 반환합니다. (기본적으로 이미 삽입된 데이터는 롤백되지 않음)
 
-insertMany의 두번째 매개변수로 옵션 도큐먼트를 지정할 수 있습니다.
 
-옵션 도큐먼트에 `ordered` 키에 true(기본값)를 지정하면 제공된 순서대로 삽입되고 false면 성능 개선을 위해 삽입을 재배열 할 수도 있습니다.
-
-도큐먼트 삽입 오류시 정렬이 된 삽입의 경우 그 시점에서 삽입을 중단하고 오류를 반환합니다. (기본적으로 이미 삽입된 데이터는 롤백되지 않음)
-
-만약 `ordered`가 false인 경우 한 문서의 삽입이 실패해도 나머지 문서의 삽입을 계속 시도합니다.
 
 ```shell
-# 세번째 도큐먼트 id가 중복되어 오류 발생 (ordered: true)
+# 세번째 도큐먼트 id를 중복시켜 오류를 발생하도록 함 (ordered: true) 
 db.users.insertMany([
   { "_id": 0, "name": "John", "age": 20 },
   { "_id": 1, "name": "Ann", "age": 21 },
   { "_id": 1, "name": "David", "age": 22 }, 
   { "_id": 2, "name": "Mike", "age": 23 }
 ])
-# 결과
-db.users.find()
-[ { _id: 0, name: 'John', age: 20 }, { _id: 1, name: 'Ann', age: 21 } ]
+```
 
+**결과**
+
+```shell
+# db.users.find()
+[ { _id: 0, name: 'John', age: 20 }, { _id: 1, name: 'Ann', age: 21 } ]
+```
+
+**정렬이 되지 않은 경우** 한 문서의 삽입이 실패해도 나머지 문서의 삽입을 계속 시도합니다.
+
+```shell
 # 세번째 도큐먼트 id가 중복되어 오류 발생 (ordered: false)
 db.users.insertMany([
   { "_id": 0, "name": "John", "age": 20 },
@@ -77,8 +72,12 @@ db.users.insertMany([
   { "_id": 1, "name": "David", "age": 22 }, 
   { "_id": 2, "name": "Mike", "age": 23 }
 ], { ordered: false })
-# 결과
-db.users.find()
+```
+
+**결과**
+
+```shell
+# db.users.find()
 [
   { _id: 0, name: 'John', age: 20 },
   { _id: 1, name: 'Ann', age: 21 },
@@ -86,11 +85,11 @@ db.users.find()
 ]
 ```
 
-참고로 몽고DB는 insertMany 외에 다양한 대량 쓰기(Bulk Write) API를 지원합니다.
+> 몽고DB는 insertMany 외에 다양한 대량 쓰기(Bulk Write) API를 지원합니다.
 
 ### 삽입 유효성 검사
 
-몽고 DB는 삽입된 데이터에 `_id` 필드가 존재하지 않으면 새로 추가하고 도큐먼트가 16MB보다 작은지 확인하는 최소한의 검사를 수행합니다.
+MongoDB는 삽입된 데이터에 `_id` 필드가 존재하지 않으면 새로 추가하고 도큐먼트가 16MB보다 작은지 확인하는 최소한의 검사를 수행합니다.
 
 <br>
 
@@ -102,17 +101,23 @@ db.users.find()
 
 필터와 일치하는 첫번째 도큐먼트를 삭제합니다.
 
-```shell 
-db.users.find()
+```shell
 [
   { _id: 0, name: 'John', age: 20 },
   { _id: 1, name: 'Ann', age: 20 },
   { _id: 2, name: 'David', age: 21 },
   { _id: 3, name: 'Mike', age: 20 }
 ]
+```
 
+```shell
 db.users.deleteOne({name: "John"})
-# 결과
+```
+
+**결과**
+
+```shell
+# db.users.find()
 [
   { _id: 1, name: 'Ann', age: 20 },
   { _id: 2, name: 'David', age: 21 },
