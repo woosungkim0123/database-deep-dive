@@ -41,7 +41,9 @@ for (let i = 0; i < totalDocuments; i++) {
 
 인덱스를 사용하지 않은 쿼리를 `컬렉션 스캔`이라고 합니다. 컬렉션 스캔은 모든 문서를 읽어야 하므로 성능이 떨어집니다.
 
-`explain()` 함수를 사용하여 쿼리의 실행 계획을 확인해보겠습니다.
+`explain()` 함수를 사용하여 쿼리의 실행 계획을 확인해보겠습니다. 
+
+인덱스를 사용하지 않는다면 `"COLLSCAN"`이라고 표시되고 사용한다면 `"IXSCAN"`이라고 표시됩니다.
 
 ```shell
 db.users.find({"username" : "user101"}).explain("executionStats")
