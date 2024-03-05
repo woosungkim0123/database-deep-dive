@@ -158,6 +158,9 @@ MongoDB는 TTL 인덱스를 매분마다 청소하므로 초 단위로 신경 �
 db.runCommand({collMod: "logs", index: {keyPattern: {lastUpdated: 1}, expireAfterSeconds: 60 * 60 * 24 * 7}})
 ```
 
+<br>
+
+## Grids
 
 
 
